@@ -4,10 +4,38 @@ import mediapipe as mp
 import time
 import utils, math
 import numpy as np
+import pyttsx3
+engine = pyttsx3.init() 
 # variables 
 frame_counter =0
 CEF_COUNTER =0
 TOTAL_BLINKS =0
+Blink = 0
+
+
+eyeMovement = ""
+translate = False
+
+eyeMap = {
+
+   
+    "L": "Hello",
+    "R": "Goodbye",
+    "LL": "Thank you",
+    "RR": "You're welcome",
+    "LLL": "Excuse me",
+    "RRR": "I'm in pain",
+    "LR": "Yes",
+    "RL": "No",
+    "RLR": "Sorry",
+    "LLR": "I'm hungry",
+    "RRL": "I'm thirsty",
+    "LRL": "Toilet",
+    "": ""
+
+
+}
+
 # constants
 CLOSED_EYES_FRAME =3
 FONTS =cv.FONT_HERSHEY_COMPLEX
@@ -149,7 +177,7 @@ def positionEstimator(cropped_eye):
     # calling pixel counter function
     eye_position, color = pixelCounter(right_piece, center_piece, left_piece)
 
-    return eye_position, color 
+    return str(eye_position)[0], color 
 
 # creating pixel counter function 
 def pixelCounter(first_piece, second_piece, third_piece):
@@ -208,6 +236,7 @@ with map_face_mesh.FaceMesh(min_detection_confidence =0.5, min_tracking_confiden
             else:
                 if CEF_COUNTER>CLOSED_EYES_FRAME:
                     TOTAL_BLINKS +=1
+                  
                     CEF_COUNTER =0
             # cv.putText(frame, f'Total Blinks: {TOTAL_BLINKS}', (100, 150), FONTS, 0.6, utils.GREEN, 2)
             utils.colorBackgroundText(frame,  f'Total Blinks: {TOTAL_BLINKS}', FONTS, 0.7, (30,150),2)
@@ -219,24 +248,106 @@ with map_face_mesh.FaceMesh(min_detection_confidence =0.5, min_tracking_confiden
             right_coords = [mesh_coords[p] for p in RIGHT_EYE]
             left_coords = [mesh_coords[p] for p in LEFT_EYE]
             crop_right, crop_left = eyesExtractor(frame, right_coords, left_coords)
-            # cv.imshow('right', crop_right)
-            # cv.imshow('left', crop_left)
             eye_position, color = positionEstimator(crop_right)
             utils.colorBackgroundText(frame, f'R: {eye_position}', FONTS, 1.0, (40, 220), 2, color[0], color[1], 8, 8)
             eye_position_left, color = positionEstimator(crop_left)
             utils.colorBackgroundText(frame, f'L: {eye_position_left}', FONTS, 1.0, (40, 320), 2, color[0], color[1], 8, 8)
-            
-            
-
-
-        # calculating  frame per seconds FPS
+            # calculating  frame per seconds FPS
         end_time = time.time()-start_time
         fps = frame_counter/end_time
-
         frame =utils.textWithBackground(frame,f'FPS: {round(fps,1)}',FONTS, 1.0, (30, 50), bgOpacity=0.9, textThickness=2)
         # writing image for thumbnail drawing shape
         # cv.imwrite(f'img/frame_{frame_counter}.png', frame)
         cv.imshow('frame', frame)
+        #--------------------------------------------------------------------------------------------
+       
+        while(Blink == 3 ):
+            #print("inside while")
+           #----------------------------------------------------------------------------------------
+            frame_counter += 1
+            ret, frame = camera.read()
+            if not ret: 
+                 break # no more frames break
+         #  resizing frame
+        
+            frame = cv.resize(frame, None, fx=1.5, fy=1.5, interpolation=cv.INTER_CUBIC)
+            frame_height, frame_width= frame.shape[:2]
+            rgb_frame = cv.cvtColor(frame, cv.COLOR_RGB2BGR)
+            results  = face_mesh.process(rgb_frame)
+            if results.multi_face_landmarks:
+                mesh_coords = landmarksDetection(frame, results, False)
+                ratio = blinkRatio(frame, mesh_coords, RIGHT_EYE, LEFT_EYE)
+            # cv.putText(frame, f'ratio {ratio}', (100, 100), FONTS, 1.0, utils.GREEN, 2)
+                utils.colorBackgroundText(frame,  f'Ratio : {round(ratio,2)}', FONTS, 0.7, (30,100),2, utils.PINK, utils.YELLOW)
+                if ratio >5.5:
+                    CEF_COUNTER +=1
+                # cv.putText(frame, 'Blink', (200, 50), FONTS, 1.3, utils.PINK, 2)
+                    utils.colorBackgroundText(frame,  f'Blink', FONTS, 1.7, (int(frame_height/2), 100), 2, utils.YELLOW, pad_x=6, pad_y=6, )
+
+                else:
+                    if CEF_COUNTER>CLOSED_EYES_FRAME:
+                        TOTAL_BLINKS +=1
+                        CEF_COUNTER =0
+            # cv.putText(frame, f'Total Blinks: {TOTAL_BLINKS}', (100, 150), FONTS, 0.6, utils.GREEN, 2)
+                utils.colorBackgroundText(frame,  f'Total Blinks: {TOTAL_BLINKS}', FONTS, 0.7, (30,150),2)
+                cv.polylines(frame,  [np.array([mesh_coords[p] for p in LEFT_EYE ], dtype=np.int32)], True, utils.GREEN, 1, cv.LINE_AA)
+                cv.polylines(frame,  [np.array([mesh_coords[p] for p in RIGHT_EYE ], dtype=np.int32)], True, utils.GREEN, 1, cv.LINE_AA)
+
+                # Blink Detector Counter Completed
+                right_coords = [mesh_coords[p] for p in RIGHT_EYE]
+                left_coords = [mesh_coords[p] for p in LEFT_EYE]
+                crop_right, crop_left = eyesExtractor(frame, right_coords, left_coords)
+                eye_position, color = positionEstimator(crop_right)
+                utils.colorBackgroundText(frame, f'R: {eye_position}', FONTS, 1.0, (40, 220), 2, color[0], color[1], 8, 8)
+                eye_position_left, color = positionEstimator(crop_left)
+                utils.colorBackgroundText(frame, f'L: {eye_position_left}', FONTS, 1.0, (40, 320), 2, color[0], color[1], 8, 8)
+            
+            end_time = time.time()-start_time
+            fps = frame_counter/end_time
+            frame =utils.textWithBackground(frame,f'FPS: {round(fps,1)}',FONTS, 1.0, (30, 50), bgOpacity=0.9, textThickness=2)
+            cv.imshow('frame', frame)
+            
+           #----------------------------------------------------------------------------------------
+            if(TOTAL_BLINKS==3):
+                
+                TOTAL_BLINKS = 0
+                Blink = 0
+                break
+                
+            eyeMovement += str(positionEstimator(crop_right)[0])
+        
+        if(eyeMovement != ""):
+            print(eyeMovement)
+
+        temp = ""
+        current = ""
+        for i in range(len(eyeMovement)):
+            if eyeMovement[i] != current and eyeMovement[i+1]==eyeMovement[i]:
+                current = eyeMovement[i]
+                temp+=eyeMovement[i]
+       
+        if(eyeMap[temp.replace('C', '')[:3]] != ""):
+            print(eyeMap[temp.replace('C', '')[:3]])
+        if(eyeMap[temp.replace('C', '')[:3]] != ""):
+            
+         
+            
+            
+            engine.say(eyeMap[temp.replace('C', '')[:3]])
+            engine.runAndWait()
+            engine.runAndWait()
+            engine.runAndWait()
+            engine.say(eyeMap[temp.replace('C', '')[:3]])
+            engine.runAndWait()
+               
+        
+        eyeMovement = ""
+        if(TOTAL_BLINKS == 3):
+           
+            Blink = 3
+            TOTAL_BLINKS = 0
+    
+        #--------------------------------------------------------------------------------------------
         key = cv.waitKey(2)
         if key==ord('q') or key ==ord('Q'):
             break
